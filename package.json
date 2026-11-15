@@ -1,0 +1,40 @@
+{
+  "name": "@inter/pi-scout",
+  "version": "0.6.1",
+  "private": true,
+  "type": "module",
+  "description": "Unified web_search / web_fetch / web_inspect for Pi with multi-provider routing and fusion",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/m2selfA/pi-scout.git"
+  },
+  "keywords": [
+    "pi-package",
+    "web-search",
+    "web-fetch",
+    "fusion"
+  ],
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.ts",
+    "format": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"scripts/*.ts\" \"*.json\" \"*.md\"",
+    "check": "npm run typecheck && npm test && npm run format"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.4",
+    "prettier": "^3.6.2",
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "undici": "^7.30.2",
+    "unpdf": "^2.2.1"
+  }
+}

@@ -1,0 +1,202 @@
+[
+  {
+    "id": "fin-1",
+    "query": "NVIDIA stock price today",
+    "intent": "finance"
+  },
+  {
+    "id": "fin-2",
+    "query": "比亚迪 2026 财报 营收",
+    "intent": "finance"
+  },
+  {
+    "id": "fin-3",
+    "query": "bitcoin ETF fund flows this month",
+    "intent": "finance"
+  },
+  {
+    "id": "fin-4",
+    "query": "美联储 最新 利率 决议",
+    "intent": "finance"
+  },
+  {
+    "id": "fin-5",
+    "query": "apple market cap",
+    "intent": "finance"
+  },
+  {
+    "id": "fin-6",
+    "query": "EUR USD forecast next quarter",
+    "intent": "finance"
+  },
+  {
+    "id": "aca-1",
+    "query": "retrieval augmented generation survey",
+    "intent": "academic"
+  },
+  {
+    "id": "aca-2",
+    "query": "transformer long context paper",
+    "intent": "academic"
+  },
+  {
+    "id": "aca-3",
+    "query": "CRISPR off-target effects study",
+    "intent": "academic"
+  },
+  {
+    "id": "aca-4",
+    "query": "图神经网络 综述 论文",
+    "intent": "academic"
+  },
+  {
+    "id": "aca-5",
+    "query": "protein folding benchmark dataset",
+    "intent": "academic"
+  },
+  {
+    "id": "aca-6",
+    "query": "climate model ensemble paper",
+    "intent": "academic"
+  },
+  {
+    "id": "doc-1",
+    "query": "react useEffect documentation",
+    "intent": "docs"
+  },
+  {
+    "id": "doc-2",
+    "query": "typescript generics handbook",
+    "intent": "docs"
+  },
+  {
+    "id": "doc-3",
+    "query": "python asyncio documentation",
+    "intent": "docs"
+  },
+  {
+    "id": "doc-4",
+    "query": "rust lifetimes guide",
+    "intent": "docs"
+  },
+  {
+    "id": "doc-5",
+    "query": "docker compose reference",
+    "intent": "docs"
+  },
+  {
+    "id": "doc-6",
+    "query": "kubernetes ingress docs",
+    "intent": "docs"
+  },
+  {
+    "id": "doc-7",
+    "query": "pandas groupby documentation",
+    "intent": "docs"
+  },
+  {
+    "id": "doc-8",
+    "query": "sqlite pragma reference",
+    "intent": "docs"
+  },
+  {
+    "id": "cod-1",
+    "query": "registerTool typescript",
+    "intent": "code"
+  },
+  {
+    "id": "cod-2",
+    "query": "pi coding agent extension example",
+    "intent": "code"
+  },
+  {
+    "id": "cod-3",
+    "query": "fastapi dependency injection",
+    "intent": "code"
+  },
+  {
+    "id": "cod-4",
+    "query": "rust tokio select",
+    "intent": "code"
+  },
+  {
+    "id": "cod-5",
+    "query": "go context cancellation",
+    "intent": "code"
+  },
+  {
+    "id": "cod-6",
+    "query": "react server components example",
+    "intent": "code"
+  },
+  {
+    "id": "cod-7",
+    "query": "prisma migration guide",
+    "intent": "code"
+  },
+  {
+    "id": "cod-8",
+    "query": "vite plugin api",
+    "intent": "code"
+  },
+  {
+    "id": "cod-9",
+    "query": "pytest fixture scope",
+    "intent": "code"
+  },
+  {
+    "id": "cod-10",
+    "query": "tailwind config theme",
+    "intent": "code"
+  },
+  {
+    "id": "new-1",
+    "query": "AI regulation news this week",
+    "intent": "news"
+  },
+  {
+    "id": "new-2",
+    "query": "OpenAI release notes",
+    "intent": "news"
+  },
+  {
+    "id": "new-3",
+    "query": "深圳 低空经济 政策",
+    "intent": "news"
+  },
+  {
+    "id": "new-4",
+    "query": "semiconductor export controls news",
+    "intent": "news"
+  },
+  {
+    "id": "new-5",
+    "query": "新能源汽车 销量 最新",
+    "intent": "news"
+  },
+  {
+    "id": "gen-1",
+    "query": "homepage of a public university",
+    "intent": "general"
+  },
+  {
+    "id": "gen-2",
+    "query": "pi coding agent documentation",
+    "intent": "general"
+  },
+  {
+    "id": "gen-3",
+    "query": "pi coding agent 插件",
+    "intent": "general"
+  },
+  {
+    "id": "gen-4",
+    "query": "best noise cancelling headphones",
+    "intent": "general"
+  },
+  {
+    "id": "gen-5",
+    "query": "中国 人口 统计 2025",
+    "intent": "general"
+  }
+]
