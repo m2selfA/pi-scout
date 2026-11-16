@@ -125,6 +125,7 @@ export class ProxyPool {
     url: string,
     init: RequestInit | undefined,
     pinned?: "auto" | "none" | string,
+    routeTimeoutMs?: number,
   ): Promise<Response> {
     const routes = this.routes(pinned);
     const failures: string[] = [];
@@ -147,7 +148,7 @@ export class ProxyPool {
           routeTimedOut = true;
           controller.abort(new Error("pi-scout route timeout"));
         },
-        Math.max(1, this.options.routeTimeoutMs),
+        Math.max(1, routeTimeoutMs ?? this.options.routeTimeoutMs),
       );
       try {
         const response = await this.transport(

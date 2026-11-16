@@ -83,8 +83,14 @@ export function buildRegistry(
   const fetchFor = (providerId: string): typeof fetch => {
     if (options.fetchImpl) return options.fetchImpl;
     const pinned = config.providers[providerId]?.proxy;
+    const routeTimeout = config.providers[providerId]?.timeoutMs;
     return ((url: string | URL | Request, init?: RequestInit) =>
-      pool.fetch(String(url), init, pinned)) as unknown as typeof fetch;
+      pool.fetch(
+        String(url),
+        init,
+        pinned,
+        routeTimeout,
+      )) as unknown as typeof fetch;
   };
 
   const registry: Registry = {

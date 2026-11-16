@@ -1,5 +1,31 @@
 # Verification
 
+## 0.7.1 (2026-11-15): Vercel provider live + free-tier model constraint
+
+### Free tier does not include DeepSeek host models
+
+With a real AI Gateway key, `deepseek/deepseek-v4.1-flash` returned **403 `no_providers_available`**: "Free tier users do not have access to this model." Probing ten cheap models showed only two working on the free credit: `alibaba/qwen-3-14b` (200) and `google/gemini-2.5-flash` (200); `deepseek/deepseek-v3.2`, `deepseek/deepseek-v4-flash`, `anthropic/claude-haiku-4.5` and `claude-haiku-5.5` all returned 403.
+
+The DeepSeek **search/fetch tools** work regardless of the host model — the tool is independent of it. Config model changed to `google/gemini-2.5-flash`.
+
+### Timeout defect found and fixed
+
+A long fetch failed with `all routes failed … pi-scout route timeout`: the pool armed an 8 s per-route timer that stayed until headers arrived, and a 31 s model call never got there. `ProxyPool.fetch` now takes a per-call `routeTimeoutMs`, and the registry passes the provider's own `timeoutMs` (vercel = 60 s). Normal fetches keep the 8 s default.
+
+### Live-verified
+
+| call                                                | result                                                                                         |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `web_search` pinned `vercel` (DeepSeek search tool) | 5 hits, **6.1 s** (Vercel changelog, docs, GitHub PR)                                          |
+| `vercel` fetch `example.com`                        | 3.0 s, 1 300 bytes — **the model translated the page into Chinese**, so output is not verbatim |
+| `vercel` fetch Vercel docs                          | **31.4 s**, 28 772 bytes, English preserved                                                    |
+
+### Limits
+
+- Host-model tokens bill on top of the $0.75/1k tool fee; both draw on the $5/month free credit.
+- `deepseek_fetch` fidelity depends on the model obeying "verbatim" — the example.com run shows translation/reformatting.
+- Free-tier model availability can change without notice; a 403 `no_providers_available` is surfaced as-is instead of being retried.
+
 ## 0.7.0 (2026-11-15): Vercel AI Gateway (DeepSeek search/fetch)
 
 ### What the service actually is (researched, not assumed)

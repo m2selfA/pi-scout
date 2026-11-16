@@ -148,7 +148,7 @@ const PROVIDER_TUNING: Record<
   vercel: {
     weight: 2,
     cost: 2,
-    timeoutMs: 30000,
+    timeoutMs: 60000,
     explicitOnly: false,
     env: "AI_GATEWAY_API_KEY",
   },
