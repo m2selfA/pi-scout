@@ -1,6 +1,6 @@
 {
   "name": "@inter/pi-scout",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "description": "Unified web_search / web_fetch / web_inspect for Pi with multi-provider routing and fusion",

@@ -54,7 +54,15 @@ export const DEFAULT_PREFERENCES: PreferenceTable = {
     docs: ["exa", "tavily", "github", "tinyfish"],
     code: ["github", "firecrawl", "exa", "tavily"],
     news: ["tinyfish", "sub2api", "tavily", "brave"],
-    general: ["sub2api", "tavily", "tinyfish", "exa", "brave", "duckduckgo"],
+    general: [
+      "sub2api",
+      "tavily",
+      "tinyfish",
+      "exa",
+      "brave",
+      "vercel",
+      "duckduckgo",
+    ],
   },
 };
 

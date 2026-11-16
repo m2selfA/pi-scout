@@ -90,6 +90,7 @@ const PROVIDER_IDS = [
   "tavily",
   "github",
   "brave",
+  "vercel",
   "duckduckgo",
   "jina",
   "direct",
@@ -143,6 +144,13 @@ const PROVIDER_TUNING: Record<
     timeoutMs: 15000,
     explicitOnly: false,
     env: "GITHUB_TOKEN",
+  },
+  vercel: {
+    weight: 2,
+    cost: 2,
+    timeoutMs: 30000,
+    explicitOnly: false,
+    env: "AI_GATEWAY_API_KEY",
   },
   brave: {
     weight: 2,

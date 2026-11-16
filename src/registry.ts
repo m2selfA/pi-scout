@@ -26,6 +26,7 @@ import {
   GITHUB_META,
 } from "./providers/github.ts";
 import { createTavilyProvider, TAVILY_META } from "./providers/tavily.ts";
+import { createVercelProvider, VERCEL_META } from "./providers/vercel.ts";
 import { createTinyFishProvider, TINYFISH_META } from "./providers/tinyfish.ts";
 import { createJinaProvider, JINA_META } from "./providers/jina.ts";
 import { createSub2apiProvider, SUB2API_META } from "./providers/sub2api.ts";
@@ -224,6 +225,30 @@ export function buildRegistry(
         registry.fetch.set(id, provider);
         registry.meta.set(id, metaFor(id, FIRECRAWL_META, providerConfig));
       }
+      continue;
+    }
+
+    if (id === "vercel") {
+      const key = resolveApiKey(providerConfig, options.env ?? process.env);
+      if (!key) {
+        registry.unconfigured.push(id);
+        continue;
+      }
+      if (!providerConfig.model) {
+        registry.warnings.push(
+          'vercel disabled: set providers.vercel.model (host model id, e.g. "deepseek/deepseek-v4.1-flash")',
+        );
+        continue;
+      }
+      const provider = createVercelProvider({
+        apiKey: key,
+        model: providerConfig.model,
+        ...(providerConfig.baseUrl ? { baseUrl: providerConfig.baseUrl } : {}),
+        fetchImpl: fetchFor(id),
+      });
+      registry.search.set(id, provider);
+      registry.fetch.set(id, provider);
+      registry.meta.set(id, metaFor(id, VERCEL_META, providerConfig));
       continue;
     }
 

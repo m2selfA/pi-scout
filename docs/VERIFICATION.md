@@ -1,5 +1,27 @@
 # Verification
 
+## 0.7.0 (2026-11-15): Vercel AI Gateway (DeepSeek search/fetch)
+
+### What the service actually is (researched, not assumed)
+
+Vercel AI Gateway exposes DeepSeek's search and fetch as **server tools**, not as standalone models:
+
+- Chat Completions: `POST https://ai-gateway.vercel.sh/v1/chat/completions` with `tools: [{ "type": "vercel:deepseek_search", "config": { "query": "...", "count": 1-50 } }]` and `tool_choice: "required"`. Fetch uses `"type": "vercel:deepseek_fetch", "config": { "url": "..." }`.
+- The gateway executes the tool **inside** the request, injects results into the model context, and returns only the model's final answer — the docs state the response has no client-facing `tool_calls` or raw search results, only `provider_metadata.gateway.gatewayToolCalls` counts and cost.
+- Pricing: DeepSeek Search **$0.75 / 1,000** billable requests, DeepSeek Fetch **$0.75 / 1,000**; empty results, failures and timeouts are not billed. Host-model tokens are billed separately. A `/v1/models` probe returned 508 models and **no** model id containing "search" or "fetch", confirming there is no direct model endpoint.
+
+### Implementation
+
+Provider `vercel` (search + fetch), key `AI_GATEWAY_API_KEY`, config `model` = host model that drives the tool (default suggestion `deepseek/deepseek-v4.1-flash`).
+
+Because raw tool output is not exposed, the provider asks the host model for strict JSON (`[{title,url,snippet}]`) and falls back to markdown-link extraction when the model disobeys. Fetch asks for verbatim Markdown.
+
+### Honest limitations
+
+- This is **model-mediated**: token cost and quality depend on the host model, and long pages may be summarised or truncated despite the "verbatim" instruction.
+- Structured results are best-effort JSON, not the gateway's raw tool payload.
+- Fixture tests only: **no `AI_GATEWAY_API_KEY` on this host**, so nothing was executed against the service. `unconfigured` until a key is added.
+
 ## 0.6.1 (2026-11-15): Brave and Firecrawl live
 
 ### Credential placement
@@ -127,7 +149,7 @@ Observations:
 | `github.com/earendil-works/pi`                               | repo + README, **1069 ms**, title `earendil-works/pi`, ★ 122115 |
 | `github.com/mattzcarey/hono-mcp-server/blob/main/src/mcp.ts` | raw file text, **900 ms**, title `…/src/mcp.ts@main`            |
 | `github.com/JetBrains/ytdb-slate/issues/52`                  | issue body, **580 ms**                                          |
-| `github.com/your-org/private-repo` (**private**)               | repo + README, **903 ms** — PAT grants access                   |
+| `github.com/your-org/private-repo` (**private**)             | repo + README, **903 ms** — PAT grants access                   |
 
 Tool path: `web_fetch` on a GitHub URL produced **only** the `github` attempt (`ok`), while `example.com` skipped GitHub and used `direct → tinyfish → jina`.
 
@@ -139,13 +161,13 @@ Tool path: `web_fetch` on a GitHub URL produced **only** the `github` attempt (`
 
 ### Host verification after restart
 
-| call                                                 | provider      | attempts                                   | bytes  |
-| ---------------------------------------------------- | ------------- | ------------------------------------------ | ------ |
-| `web_fetch github.com/earendil-works/pi`             | github        | `github:ok`                                | 10 823 |
-| `web_fetch …/blob/main/src/mcp.ts`                   | github        | `github:ok`                                | 18 322 |
+| call                                                   | provider      | attempts                                   | bytes  |
+| ------------------------------------------------------ | ------------- | ------------------------------------------ | ------ |
+| `web_fetch github.com/earendil-works/pi`               | github        | `github:ok`                                | 10 823 |
+| `web_fetch …/blob/main/src/mcp.ts`                     | github        | `github:ok`                                | 18 322 |
 | `web_fetch github.com/your-org/private-repo` (private) | github        | `github:ok`                                | 9 517  |
-| `web_fetch example.com`                              | jina          | `direct:empty → tinyfish:empty → jina:ok`  | 1 465  |
-| one call with `[issue URL, example.com]`             | github / jina | `github:ok` and `direct → tinyfish → jina` | —      |
+| `web_fetch example.com`                                | jina          | `direct:empty → tinyfish:empty → jina:ok`  | 1 465  |
+| one call with `[issue URL, example.com]`               | github / jina | `github:ok` and `direct → tinyfish → jina` | —      |
 
 The mixed call confirms the cascade is ordered **per URL**, not per batch: the GitHub issue used a single GitHub attempt while the non-GitHub URL skipped GitHub entirely.
 
@@ -226,11 +248,11 @@ A balanced code query (`typescript monorepo extension implementation`) exposed t
 
 ### Live-verified (this host)
 
-| probe                                                                              | result                                                                                                                                  |
-| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `curl -x <proxy> https://r.jina.ai/https://example.com` for four candidate proxies | all **200**: proxy-a:7890 **1.06 s**, proxy-b:7890 **1.07 s**, proxy-c:17897 **5.73 s**, proxy-d:17897 **5.58 s** |
-| `https://r.jina.ai` **direct**                                                     | fails after 15 s (blocked); `curl` exit 28                                                                                              |
-| `scripts/smoke-fetch.ts https://example.com` through the pool                      | `direct` 200/577 B/862 ms; `tinyfish` 200/156 B/1552 ms; **`jina` 200/1465 B/1324 ms**, text sha256 prefix `24a9212f6992697f`           |
+| probe                                                                              | result                                                                                                                        |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `curl -x <proxy> https://r.jina.ai/https://example.com` for four candidate proxies | all **200**: proxy-a:7890 **1.06 s**, proxy-b:7890 **1.07 s**, proxy-c:17897 **5.73 s**, proxy-d:17897 **5.58 s**             |
+| `https://r.jina.ai` **direct**                                                     | fails after 15 s (blocked); `curl` exit 28                                                                                    |
+| `scripts/smoke-fetch.ts https://example.com` through the pool                      | `direct` 200/577 B/862 ms; `tinyfish` 200/156 B/1552 ms; **`jina` 200/1465 B/1324 ms**, text sha256 prefix `24a9212f6992697f` |
 
 The Jina result is the proof that fallback works: direct fails at the transport layer, the pool advances to the first healthy proxy, and the same provider returns a normal document. Proxy order in the user config is fastest-first, with the two slower proxies as further fallbacks.
 

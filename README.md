@@ -76,6 +76,11 @@ pi -e E:\inter\Documents\Repos\pi-scout
       "apiKey": "ghp_..."
     },
     "jina": { "enabled": true, "apiKeyEnv": "JINA_API_KEY", "proxy": "auto" },
+    "vercel": {
+      "enabled": true,
+      "apiKeyEnv": "AI_GATEWAY_API_KEY",
+      "model": "deepseek/deepseek-v4.1-flash"
+    },
     "direct": { "enabled": true, "proxy": "none" }
   },
   "network": {
@@ -158,7 +163,8 @@ pi -e E:\inter\Documents\Repos\pi-scout
 | direct     | —      | ✅    | —       | 已实现，**live-verified**（example.com 200 / 577 B / 938 ms）                                                                                        |
 | brave      | ✅     | —     | —       | 已实现（Brave Web Search API）；**未 live 验证**（本机无 BRAVE_API_KEY）                                                                             |
 | duckduckgo | ✅     | —     | —       | 已实现，**live-verified**（经代理 5 条 / 1953 ms，已过滤广告位）                                                                                     |
-| firecrawl  | ✅     | ✅    | —       | 已实现（search + scrape）；**未 live 验证**（本机无 FIRECRAWL_API_KEY）                                                                              |
+| firecrawl  | ✅     | ✅    | —       | 已实现，**live-verified**：search 5 条 / 2 872 ms，scrape 885 ms / 1 343 B                                                                           |
+| vercel     | ✅     | ✅    | —       | 已实现（AI Gateway server tools `deepseek_search` / `deepseek_fetch`）；**未 live**（本机无 AI_GATEWAY_API_KEY），且为模型中介，见 VERIFICATION      |
 
 GitHub 抓取：`web_fetch` 遇到 `github.com` / `raw.githubusercontent.com` 时自动把 `github` provider 排到最前，`/repos` 取元数据+README、`/blob` 取文件原文、`/tree` 列目录、`/issues|/pull` 取正文；其它域名会跳过它。API 单文件内联上限 1 MB，超限直接报错而不是悄悄截断。
 
