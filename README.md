@@ -2,7 +2,7 @@
 
 Pi 的统一 web 入口：`web_search` + `web_fetch` + `web_inspect`，多 provider 路由、融合、级联，结果带 provenance。
 
-- 版本：0.6.1（Brave / DuckDuckGo / Firecrawl 后端；GitHub 搜索与抓取、PDF 抽取、重定向 SSRF 复核、40 条横评）
+- 版本：0.8.0（Vercel AI Gateway 改用 AI SDK 取原始工具结果；Brave / DuckDuckGo / Firecrawl；GitHub 搜索与抓取、PDF 抽取、重定向 SSRF 复核、40 条横评）
 - 包名：`@inter/pi-scout`（暂不发布 npm，仅 GitHub 公开仓库）
 - 设计文档：`docs/DESIGN.md`
 
@@ -164,7 +164,7 @@ pi -e E:\inter\Documents\Repos\pi-scout
 | brave      | ✅     | —     | —       | 已实现（Brave Web Search API）；**未 live 验证**（本机无 BRAVE_API_KEY）                                                                             |
 | duckduckgo | ✅     | —     | —       | 已实现，**live-verified**（经代理 5 条 / 1953 ms，已过滤广告位）                                                                                     |
 | firecrawl  | ✅     | ✅    | —       | 已实现，**live-verified**：search 5 条 / 2 872 ms，scrape 885 ms / 1 343 B                                                                           |
-| vercel     | ✅     | ✅    | —       | 已实现，**live-verified**：search 5 条 / 6.1 s，fetch 28.8 KB / 31.4 s（宿主模型 `google/gemini-2.5-flash`）；模型中介，见 VERIFICATION              |
+| vercel     | ✅     | ✅    | —       | 已实现（**AI SDK** `gateway.tools.deepseekSearch/Fetch`，直接取原始 `toolResults`），**live-verified**：search 5 条 / 4.3 s，fetch 5.1 KB / 9.4 s    |
 
 GitHub 抓取：`web_fetch` 遇到 `github.com` / `raw.githubusercontent.com` 时自动把 `github` provider 排到最前，`/repos` 取元数据+README、`/blob` 取文件原文、`/tree` 列目录、`/issues|/pull` 取正文；其它域名会跳过它。API 单文件内联上限 1 MB，超限直接报错而不是悄悄截断。
 

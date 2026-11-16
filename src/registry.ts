@@ -242,7 +242,7 @@ export function buildRegistry(
       }
       if (!providerConfig.model) {
         registry.warnings.push(
-          'vercel disabled: set providers.vercel.model (host model id, e.g. "deepseek/deepseek-v4.1-flash")',
+          'vercel disabled: set providers.vercel.model (host model id, e.g. "google/gemini-2.5-flash")',
         );
         continue;
       }
@@ -250,7 +250,7 @@ export function buildRegistry(
         apiKey: key,
         model: providerConfig.model,
         ...(providerConfig.baseUrl ? { baseUrl: providerConfig.baseUrl } : {}),
-        fetchImpl: fetchFor(id),
+        fetch: fetchFor(id) as typeof fetch,
       });
       registry.search.set(id, provider);
       registry.fetch.set(id, provider);

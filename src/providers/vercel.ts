@@ -1,3 +1,5 @@
+import { generateText } from "ai";
+import { createGateway } from "@ai-sdk/gateway";
 import type {
   FetchDoc,
   FetchProvider,
@@ -10,167 +12,178 @@ import type {
 
 export const VERCEL_META: ProviderMeta = {
   id: "vercel",
-  label: "Vercel AI Gateway (DeepSeek search/fetch)",
+  label: "Vercel AI Gateway (DeepSeek search/fetch tools)",
   capabilities: ["search", "fetch"],
   auth: "key",
   envVar: "AI_GATEWAY_API_KEY",
   cost: 2,
   weight: 2,
-  timeoutMs: 30000,
+  timeoutMs: 60000,
 };
 
-export const VERCEL_BASE = "https://ai-gateway.vercel.sh/v1";
-
-const SEARCH_PROMPT =
-  "You are a search backend. Use the deepseek search tool, then reply with ONLY a JSON array of the results you received. " +
-  'Each item must be {"title": string, "url": string, "snippet": string}. No prose, no code fences.';
-const FETCH_PROMPT =
-  "Fetch the given URL with the deepseek fetch tool, then reply with the page content verbatim as Markdown. " +
-  "Do not summarise, do not add commentary, do not wrap it in code fences.";
-
-function stripFences(text: string): string {
-  return text
-    .replace(/^\s*```(?:json)?/i, "")
-    .replace(/```\s*$/, "")
-    .trim();
+interface DeepSeekSearchItem {
+  title?: string | null;
+  url?: string | null;
+  snippet?: string | null;
+  summary?: string | null;
+  content?: string | null;
+  date?: string | null;
+  site_name?: string | null;
 }
 
-/** The gateway returns a model answer, not raw tool output, so we ask for JSON
- *  and fall back to markdown links when the model ignores the instruction. */
-export function parseVercelHits(text: string, limit: number): SearchHit[] {
-  const body = stripFences(text);
-  const start = body.indexOf("[");
-  const end = body.lastIndexOf("]");
-  if (start >= 0 && end > start) {
-    try {
-      const parsed = JSON.parse(body.slice(start, end + 1)) as Array<{
-        title?: string;
-        url?: string;
-        snippet?: string;
-      }>;
-      const hits = parsed
-        .filter(
-          (item) => typeof item.url === "string" && item.url.startsWith("http"),
-        )
-        .map((item, index) => ({
-          title: item.title ?? "",
-          url: item.url as string,
-          snippet: item.snippet ?? "",
-          provider: "vercel",
-          rank: index + 1,
-        }));
-      if (hits.length > 0) return hits.slice(0, limit);
-    } catch {
-      // fall through to link extraction
-    }
-  }
-  const hits: SearchHit[] = [];
-  for (const match of body.matchAll(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g)) {
-    hits.push({
-      title: match[1] ?? "",
-      url: match[2] as string,
-      snippet: "",
+interface ToolResultLike {
+  toolName?: string;
+  output?: unknown;
+}
+
+/** Injected so tests can replay recorded tool results without the network. */
+export type GenerateFn = (options: Record<string, unknown>) => Promise<{
+  toolResults?: ToolResultLike[];
+  providerMetadata?: Record<string, unknown>;
+}>;
+
+export function mapDeepSeekHits(payload: unknown, limit: number): SearchHit[] {
+  const results = (payload as { results?: DeepSeekSearchItem[] } | null)
+    ?.results;
+  if (!Array.isArray(results)) return [];
+  return results
+    .filter(
+      (item) => typeof item.url === "string" && item.url.startsWith("http"),
+    )
+    .slice(0, limit)
+    .map((item, index) => ({
+      title: item.title ?? "",
+      url: item.url as string,
+      snippet: (item.snippet ?? item.summary ?? item.content ?? "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 400),
+      ...(item.date ? { publishedAt: item.date } : {}),
       provider: "vercel",
-      rank: hits.length + 1,
-    });
-    if (hits.length >= limit) break;
-  }
-  return hits;
+      rank: index + 1,
+    }));
 }
 
 export interface VercelOptions {
   apiKey: string;
-  /** Host model that drives the server tool, e.g. "deepseek/deepseek-v4.1-flash". */
+  /** Host model that drives the server tool, e.g. "google/gemini-2.5-flash". */
   model: string;
+  /** Overrides the SDK base URL (default https://ai-gateway.vercel.sh/v4/ai). */
   baseUrl?: string;
-  fetchImpl?: typeof fetch;
+  /** Proxy-aware fetch, so gateway calls honour the pi-scout route pool. */
+  fetch?: typeof fetch;
+  generateImpl?: GenerateFn;
+}
+
+function statusOf(error: unknown): number | undefined {
+  const candidate = error as {
+    statusCode?: unknown;
+    cause?: { statusCode?: unknown };
+  };
+  const raw = candidate?.statusCode ?? candidate?.cause?.statusCode;
+  return typeof raw === "number" ? raw : undefined;
+}
+
+function explain(error: unknown): Error {
+  const status = statusOf(error);
+  if (status === 401 || status === 403) {
+    return new Error(
+      `vercel: AI Gateway rejected the request (${status}); check the key and whether the host model is available on the free tier`,
+    );
+  }
+  if (status === 402) {
+    return new Error(
+      "vercel: credit exhausted (402) — monthly free credit used up",
+    );
+  }
+  if (status === 429) return new Error("vercel: rate limited (429)");
+  const message = error instanceof Error ? error.message : String(error);
+  return new Error(`vercel: ${message.slice(0, 300)}`);
 }
 
 export function createVercelProvider(
   options: VercelOptions,
 ): SearchProvider & FetchProvider {
-  const doFetch = options.fetchImpl ?? fetch;
-  const base = (options.baseUrl ?? VERCEL_BASE).replace(/\/+$/, "");
+  const gateway = createGateway({
+    apiKey: options.apiKey,
+    ...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
+    ...(options.fetch ? { fetch: options.fetch as never } : {}),
+  });
+  const generate: GenerateFn =
+    options.generateImpl ??
+    ((request) =>
+      generateText(request as never) as unknown as ReturnType<GenerateFn>);
 
-  const chat = async (
-    body: Record<string, unknown>,
+  const run = async (
+    tool: Record<string, unknown>,
+    prompt: string,
     signal: AbortSignal,
-  ): Promise<string> => {
-    const response = await doFetch(`${base}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${options.apiKey}`,
-      },
-      body: JSON.stringify(body),
-      signal,
-    });
-    if (response.status === 401 || response.status === 403) {
-      throw new Error(`vercel: invalid AI Gateway key (${response.status})`);
+    toolName: string,
+  ): Promise<unknown> => {
+    let response: Awaited<ReturnType<GenerateFn>>;
+    try {
+      response = await generate({
+        model: gateway(options.model),
+        prompt,
+        tools: tool,
+        toolChoice: "required",
+        // Gemini-class hosts spend reasoning tokens before the tool call, so a
+        // tight cap produces ToolChoiceViolationError instead of a result.
+        maxOutputTokens: 300,
+        maxRetries: 0,
+        abortSignal: signal,
+      });
+    } catch (error) {
+      throw explain(error);
     }
-    if (response.status === 402) {
+    const match = (response.toolResults ?? []).find(
+      (result) => result.toolName === toolName,
+    );
+    if (!match) {
       throw new Error(
-        "vercel: credit exhausted (402) — monthly free credit used up",
+        `vercel: ${toolName} did not run (model returned no tool result)`,
       );
     }
-    if (response.status === 429) throw new Error("vercel: rate limited (429)");
-    if (!response.ok) throw new Error(`vercel HTTP ${response.status}`);
-    const payload = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    const text = payload.choices?.[0]?.message?.content ?? "";
-    if (!text.trim()) throw new Error("vercel: empty model response");
-    return text;
+    return match.output;
   };
 
   const search: SearchProvider = {
     meta: VERCEL_META,
     async search(req: SearchRequest) {
-      const text = await chat(
+      const output = await run(
         {
-          model: options.model,
-          messages: [
-            { role: "system", content: SEARCH_PROMPT },
-            { role: "user", content: req.query },
-          ],
-          tools: [
-            {
-              type: "vercel:deepseek_search",
-              config: {
-                query: req.query,
-                count: Math.min(50, Math.max(1, req.maxResults)),
-              },
-            },
-          ],
-          tool_choice: "required",
-          max_tokens: 1500,
+          deepseek_search: gateway.tools.deepseekSearch({
+            query: req.query,
+            count: Math.min(50, Math.max(1, req.maxResults)),
+          }),
         },
+        req.query,
         req.signal,
+        "deepseek_search",
       );
-      return { hits: parseVercelHits(text, req.maxResults), raw: { text } };
+      const hits = mapDeepSeekHits(output, req.maxResults);
+      if (hits.length === 0) {
+        throw new Error("vercel: deepseek_search returned no results");
+      }
+      return { hits, raw: output };
     },
   };
 
   const fetchPage = async (req: FetchRequest): Promise<FetchDoc> => {
-    const text = await chat(
-      {
-        model: options.model,
-        messages: [
-          { role: "system", content: FETCH_PROMPT },
-          { role: "user", content: req.url },
-        ],
-        tools: [{ type: "vercel:deepseek_fetch", config: { url: req.url } }],
-        tool_choice: "required",
-        max_tokens: 8000,
-      },
+    const output = (await run(
+      { deepseek_fetch: gateway.tools.deepseekFetch({ url: req.url }) },
+      `Fetch ${req.url}`,
       req.signal,
-    );
-    const markdown = stripFences(text);
+      "deepseek_fetch",
+    )) as { content?: string; title?: string } | null;
+    const markdown = (output?.content ?? "").trim();
+    if (!markdown)
+      throw new Error("vercel: deepseek_fetch returned empty content");
     const clipped = markdown.slice(0, req.maxChars);
     return {
       url: req.url,
       finalUrl: req.url,
-      title: new URL(req.url).hostname,
+      title: output?.title?.trim() || new URL(req.url).hostname,
       markdown: clipped,
       mime: "text/markdown",
       status: 200,

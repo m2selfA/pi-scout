@@ -1,5 +1,39 @@
 # Verification
 
+## 0.8.0 (2026-11-15): Vercel provider rebuilt on the AI SDK
+
+### Dependency change (explicit user decision)
+
+The "no new dependencies" constraint was dropped for this provider. Added `ai@^7.0.173` and `@ai-sdk/gateway@^4.0.146` (10 packages total). The provider now calls `gateway.tools.deepseekSearch()` / `gateway.tools.deepseekFetch()` through `generateText`, which is the only way to receive the tool payload itself.
+
+### Why: raw results are only reachable through the SDK
+
+Earlier probes (0.7.3) proved raw REST never returns `{results}`. With the SDK the same call yields `result.toolResults[0].output`:
+
+- search: `{ results: [{ title, url, snippet, summary, content, date, site_name, authority, rerank_score }] }`
+- fetch: `{ content, title }`
+
+Implementation detail: `toolChoice: "required"` plus `maxOutputTokens: 300`. A tighter cap made Gemini spend its budget on reasoning tokens and fail with `ToolChoiceViolationError`; 300 is enough for the call and keeps output cost negligible.
+
+### Live results through the provider
+
+| call                                       | result                                                           |
+| ------------------------------------------ | ---------------------------------------------------------------- |
+| search "Vercel AI Gateway DeepSeek search" | **5 hits, 4 341 ms** (changelog, docs page, GitHub PR)           |
+| fetch https://vercel.com/docs/ai-gateway   | **9 403 ms**, 5 111 bytes, English Markdown, title from the tool |
+
+Both are faster and truer than the previous model-transcription implementation (6.1 s search / 31.4 s fetch).
+
+### Correction to the 0.7.1 record
+
+0.7.1 claimed DeepSeek Fetch output was "translated by the host model". That was wrong. The SDK spike shows the **tool result itself** for `example.com` is already Chinese (916 chars), before any model sees it. The localisation happens inside DeepSeek’s fetch service; the host model is not responsible.
+
+### Unchanged limits
+
+- The host model still has to exist and support tool calling: `deepseek/*` hosts are not on the free tier (403), `google/gemini-2.5-flash` works, `alibaba/qwen-3-14b` refuses with `ToolChoiceViolationError`.
+- Tool fee stays $0.75/1 000 requests; host tokens bill separately.
+- Gateway calls still go through the pi-scout route pool because the SDK accepts a custom `fetch`.
+
 ## 0.7.3 (2026-11-15): Can DeepSeek search/fetch return raw results without new deps?
 
 ### What `gateway.tools.deepseekSearch()` actually is

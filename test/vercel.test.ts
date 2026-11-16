@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   createVercelProvider,
-  parseVercelHits,
+  mapDeepSeekHits,
+  type GenerateFn,
 } from "../src/providers/vercel.ts";
 
 const signal = () => new AbortController().signal;
-const req = (query: string) => ({
+const searchReq = (query: string) => ({
   query,
   maxResults: 5,
   mode: "balanced" as const,
@@ -14,62 +15,100 @@ const req = (query: string) => ({
   deadline: Date.now() + 5000,
 });
 
-const reply = (content: string) =>
-  new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
-    status: 200,
-    headers: { "content-type": "application/json" },
-  });
+const searchResult = (query: string, count: number, items: unknown[]) => ({
+  toolResults: [{ toolName: "deepseek_search", output: { results: items } }],
+  providerMetadata: { gateway: { cost: "0.0001" } },
+  _probe: { query, count },
+});
 
-test("search sends the deepseek_search server tool and parses fenced JSON", async () => {
-  let body: Record<string, unknown> | undefined;
-  const fake = (async (_url: string | URL | Request, init?: RequestInit) => {
-    body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-    return reply(
-      '\u0060\u0060\u0060json\n[{"title":"A","url":"https://a.example/1","snippet":"s1"}]\n\u0060\u0060\u0060',
-    );
-  }) as unknown as typeof fetch;
-
+test("search calls the deepseek_search tool and maps raw results", async () => {
+  let seen: Record<string, unknown> | undefined;
+  const generate: GenerateFn = async (options) => {
+    seen = options;
+    return searchResult("pi agent", 5, [
+      {
+        title: "A",
+        url: "https://a.example/1",
+        snippet: "  spaced   snippet ",
+        date: "2026-11-01",
+      },
+      { title: "Bad", url: "mailto:x@y" },
+    ]);
+  };
   const provider = createVercelProvider({
     apiKey: "k",
-    model: "deepseek/deepseek-v4.1-flash",
-    fetchImpl: fake,
+    model: "google/gemini-2.5-flash",
+    generateImpl: generate,
   });
-  const result = await provider.search(req("pi coding agent"));
+  const result = await provider.search(searchReq("pi agent"));
 
-  assert.equal(body?.model, "deepseek/deepseek-v4.1-flash");
-  const tools = body?.tools as Array<{
-    type: string;
-    config: { query: string; count: number };
-  }>;
-  assert.equal(tools[0]!.type, "vercel:deepseek_search");
-  assert.deepEqual(tools[0]!.config, { query: "pi coding agent", count: 5 });
-  assert.equal(body?.tool_choice, "required");
+  const tools = seen?.tools as Record<
+    string,
+    { args?: Record<string, unknown> }
+  >;
+  assert.deepEqual(tools.deepseek_search?.args, {
+    query: "pi agent",
+    count: 5,
+  });
+  assert.equal(seen?.toolChoice, "required");
   assert.equal(result.hits.length, 1);
   assert.equal(result.hits[0]!.url, "https://a.example/1");
+  assert.equal(result.hits[0]!.snippet, "spaced snippet");
+  assert.equal(result.hits[0]!.publishedAt, "2026-11-01");
 });
 
-test("markdown link fallback keeps results when the model ignores the JSON request", () => {
-  const hits = parseVercelHits(
-    "Here are results:\n- [Example](https://example.com/a) and [Two](https://2.example/b)",
-    5,
-  );
-  assert.deepEqual(
-    hits.map((h) => h.url),
-    ["https://example.com/a", "https://2.example/b"],
-  );
-});
-
-test("fetch pins the URL in deepseek_fetch config and returns markdown", async () => {
-  let body: Record<string, unknown> | undefined;
-  const fake = (async (_url: string | URL | Request, init?: RequestInit) => {
-    body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-    return reply("# Title\n\nBody text");
-  }) as unknown as typeof fetch;
-
+test("an empty result set fails instead of returning silence", async () => {
+  const generate: GenerateFn = async () => searchResult("q", 1, []);
   const provider = createVercelProvider({
     apiKey: "k",
     model: "m",
-    fetchImpl: fake,
+    generateImpl: generate,
+  });
+  await assert.rejects(provider.search(searchReq("q")), /returned no results/);
+});
+
+test("a missing tool result is reported explicitly", async () => {
+  const generate: GenerateFn = async () => ({ toolResults: [] });
+  const provider = createVercelProvider({
+    apiKey: "k",
+    model: "m",
+    generateImpl: generate,
+  });
+  await assert.rejects(provider.search(searchReq("q")), /did not run/);
+});
+
+test("gateway auth failures are explained", async () => {
+  const generate: GenerateFn = async () => {
+    throw Object.assign(new Error("Unauthorized"), { statusCode: 403 });
+  };
+  const provider = createVercelProvider({
+    apiKey: "k",
+    model: "m",
+    generateImpl: generate,
+  });
+  await assert.rejects(
+    provider.search(searchReq("q")),
+    /rejected the request \(403\)/,
+  );
+});
+
+test("fetch uses deepseek_fetch and returns markdown plus title", async () => {
+  let seen: Record<string, unknown> | undefined;
+  const generate: GenerateFn = async (options) => {
+    seen = options;
+    return {
+      toolResults: [
+        {
+          toolName: "deepseek_fetch",
+          output: { content: "# Title\n\nBody", title: "Page Title" },
+        },
+      ],
+    };
+  };
+  const provider = createVercelProvider({
+    apiKey: "k",
+    model: "m",
+    generateImpl: generate,
   });
   const doc = await provider.fetch({
     url: "https://example.com/doc",
@@ -79,19 +118,19 @@ test("fetch pins the URL in deepseek_fetch config and returns markdown", async (
     deadline: Date.now() + 5000,
   });
 
-  const tools = body?.tools as Array<{ type: string; config: { url: string } }>;
-  assert.equal(tools[0]!.type, "vercel:deepseek_fetch");
-  assert.equal(tools[0]!.config.url, "https://example.com/doc");
+  const tools = seen?.tools as Record<
+    string,
+    { args?: Record<string, unknown> }
+  >;
+  assert.deepEqual(tools.deepseek_fetch?.args, {
+    url: "https://example.com/doc",
+  });
+  assert.equal(doc.title, "Page Title");
   assert.equal(doc.provider, "vercel");
-  assert.match(doc.markdown, /Body text/);
+  assert.match(doc.markdown, /Body/);
 });
 
-test("exhausted credit is reported distinctly", async () => {
-  const provider = createVercelProvider({
-    apiKey: "k",
-    model: "m",
-    fetchImpl: (async () =>
-      new Response("{}", { status: 402 })) as unknown as typeof fetch,
-  });
-  await assert.rejects(provider.search(req("q")), /credit exhausted/);
+test("mapDeepSeekHits tolerates missing arrays", () => {
+  assert.deepEqual(mapDeepSeekHits(null, 3), []);
+  assert.deepEqual(mapDeepSeekHits({}, 3), []);
 });
