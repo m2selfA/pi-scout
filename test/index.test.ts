@@ -93,6 +93,23 @@ test("an invalid config fails closed with the file path in the message", async (
   assert.match(result.content[0]!.text, /maxParallel/);
 });
 
+test("web_fetch rejects an unknown pinned provider and lists the available ones", async () => {
+  const { tools } = await load({
+    providers: { direct: { enabled: true }, jina: { enabled: false } },
+  });
+  const fetchTool = tools.find((t) => t.name === "web_fetch")!;
+  const result = await fetchTool.execute("id", {
+    url: "https://example.com",
+    provider: "nope",
+  });
+  assert.equal(result.isError, true);
+  assert.match(
+    result.content[0]!.text,
+    /Requested fetch provider\(s\) not available: nope/,
+  );
+  assert.match(result.content[0]!.text, /Available: .*direct/);
+});
+
 test("scout-reload rebuilds the registry from the current config file", async () => {
   const { handlers, paths } = await load({
     providers: {

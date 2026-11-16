@@ -358,6 +358,7 @@ async function runSearch(
 
 function parseFetchParams(input: unknown): {
   urls: string[];
+  providers?: string[];
   maxChars?: number;
   mode: "readable" | "raw";
 } {
@@ -375,7 +376,18 @@ function parseFetchParams(input: unknown): {
   ) {
     throw new Error("max_chars must be an integer between 100 and 200000");
   }
-  return { urls: urls.slice(0, 5), mode, ...(maxChars ? { maxChars } : {}) };
+  const singleProvider = readString(p.provider, "provider");
+  const manyProviders = readStringList(p.providers, "providers", 5);
+  const providers = [
+    ...(manyProviders ?? []),
+    ...(singleProvider ? [singleProvider] : []),
+  ].filter(Boolean);
+  return {
+    urls: urls.slice(0, 5),
+    mode,
+    ...(providers.length ? { providers } : {}),
+    ...(maxChars ? { maxChars } : {}),
+  };
 }
 
 function describeDoc(doc: FetchDoc): string {
@@ -504,6 +516,8 @@ export default function piScout(pi: PiApi): void {
         urls: { type: "array", items: { type: "string" }, maxItems: 5 },
         mode: { type: "string", enum: ["readable", "raw"] },
         max_chars: { type: "integer", minimum: 100, maximum: 200000 },
+        provider: { type: "string" },
+        providers: { type: "array", items: { type: "string" }, maxItems: 5 },
       },
       additionalProperties: false,
     },
@@ -521,11 +535,23 @@ export default function piScout(pi: PiApi): void {
             ctx as
               { sessionManager?: { getSessionId?: () => string } } | undefined
           )?.sessionManager?.getSessionId?.() ?? DEFAULT_SESSION;
+        if (params.providers) {
+          const missing = params.providers.filter(
+            (id) => !registry.fetch.has(id),
+          );
+          if (missing.length > 0) {
+            return fail(
+              `Requested fetch provider(s) not available: ${missing.join(", ")}. Available: ${[...registry.fetch.keys()].join(", ")}`,
+            );
+          }
+        }
         const blocks: string[] = [];
         const details: Array<Record<string, unknown>> = [];
         for (const url of params.urls) {
           const maxChars = params.maxChars ?? config.fetch.maxChars;
-          const entries = orderFetchCascade(config.fetch.cascade, url)
+          const entries = (
+            params.providers ?? orderFetchCascade(config.fetch.cascade, url)
+          )
             .filter((id) => registry.fetch.has(id))
             .map((id) => ({
               provider: id,

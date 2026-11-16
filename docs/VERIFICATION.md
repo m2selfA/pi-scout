@@ -1,5 +1,32 @@
 # Verification
 
+## 0.7.2 (2026-11-15): Vercel live in host; web_fetch provider pinning
+
+### Host verification after restart
+
+`web_search` pinned to `vercel` succeeded in the live session: **5 hits, 7 798 ms**, results were the Vercel changelog, the DeepSeek Fetch model page and the AI SDK release notes. The previous 403 is gone, confirming the free-tier model switch took effect.
+
+### "deepseek/search" and "deepseek/fetch" are not model ids
+
+The user's phrasing implied these were models. Verified against the live gateway with a real key:
+
+| attempted model id         | response              |
+| -------------------------- | --------------------- |
+| `deepseek/deepseek-search` | 404 `model_not_found` |
+| `deepseek/deepseek-fetch`  | 404 `model_not_found` |
+| `deepseek/search`          | 404 `model_not_found` |
+| `deepseek/fetch`           | 404 `model_not_found` |
+
+So there is no standalone endpoint; the correct integration is the server-tool form this provider already uses (`vercel:deepseek_search`, `vercel:deepseek_fetch`), with any tool-calling host model on the free credit.
+
+### web_fetch gained provider pinning
+
+Previously `web_fetch` only followed the cascade, so a provider like `vercel` (last in the cascade) could never be exercised from the host. It now accepts `provider` / `providers`, mirroring `web_search`, and rejects unknown ids with the available list. Verified through the real tool entry: pinned `vercel` fetch of `example.com` → `vercel:ok`, 1 300 bytes, 4 212 ms, single attempt.
+
+### Fidelity caveat confirmed again
+
+The pinned Vercel fetch of `example.com` returned the page **translated into Chinese**. Output is model-mediated: do not treat DeepSeek Fetch results as verbatim source text.
+
 ## 0.7.1 (2026-11-15): Vercel provider live + free-tier model constraint
 
 ### Free tier does not include DeepSeek host models
