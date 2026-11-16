@@ -1,5 +1,35 @@
 # Verification
 
+## 0.7.3 (2026-11-15): Can DeepSeek search/fetch return raw results without new deps?
+
+### What `gateway.tools.deepseekSearch()` actually is
+
+Read from the AI SDK source (`packages/gateway/src/tool/deepseek-search.ts`, via GitHub API):
+
+- It is a **provider-executed tool**: `createProviderExecutedToolFactory({ id: 'gateway.deepseek_search' })`, i.e. `{ type: 'provider', isProviderExecuted: true, id }`.
+- Config args: `query?`, `count?`, `needContent?`, `oriQuestion?`, `localization?`; model-facing args are `query`, `count`, `need_content`, `ori_question`.
+- Output schema: `{ results: DeepSeekSearchResult[] }` with `title`, `url`, `snippet`, `summary`, `content`, `date`, `site_name`, `authority`, `rerank_score`.
+- `deepseek_fetch` returns `{ content, title? }` (Markdown).
+- Docs show `console.log(result.toolResults)`, implying the AI SDK surfaces them; that path needs `ai` + `@ai-sdk/gateway` (AI SDK 6: gateway >=3.0.227, AI SDK 7: >=4.0.133).
+
+### Three zero-dependency probes against the live gateway
+
+| probe                              | result                                                                                                                                                                                                       |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Chat Completions, non-stream       | `choices[0].message` has only `role`, `content`, `provider_metadata`; no `results`, no `tool_calls`                                                                                                          |
+| Chat Completions, `stream: true`   | SSE chunks contain only `role` / `content` / `provider_metadata`; **prompt tokens jumped 120 -> 2 964**, proving the tool ran and its output was injected into model context, but no tool payload is emitted |
+| `/v1/responses` with the same tool | `output` contains a single `message` item; no tool-result item                                                                                                                                               |
+
+Conclusion: **the raw `{results}` array never leaves the gateway over REST.** Without the AI SDK, structured hits can only be obtained by asking the model to transcribe them (current implementation), which is lossy by construction.
+
+### Cost metadata is available
+
+`provider_metadata.gateway.cost` is present on every response (observed `0.0001035` USD for one search+answer call), alongside `gatewayCost`, `inferenceCost` and `generationId`. This could feed run provenance even without the SDK.
+
+### Alternative with raw results and still no new deps
+
+DeepSeek publishes the same capability as plain JSON Tool APIs (`https://api-docs.deepseek.com/guides/search`: "Both are raw JSON APIs. They use the same bearer authentication as the DeepSeek API."). Calling those directly returns structured results with no model in the loop - but bills the DeepSeek key, not the AI Gateway free credit.
+
 ## 0.7.2 (2026-11-15): Vercel live in host; web_fetch provider pinning
 
 ### Host verification after restart
